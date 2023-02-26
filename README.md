@@ -1,5 +1,5 @@
 # VDTool
-The VDTool provides a modern C++ (version C++ 11 or later) incremental backup interface for VMWare disks.
+The VDTool provides a modern C++ (version C++ 11 or later) backup interface for VMWare disks.
 Backup data is stored in Amazon S3 storage.
 
 VMWare disk development kit documentation:
