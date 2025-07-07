@@ -4,8 +4,6 @@
 #include <mutex>
 #include <condition_variable>
 
-using namespace std;
-
 template <class T>
 class SafeQueue
 {
