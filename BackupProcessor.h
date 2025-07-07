@@ -3,8 +3,6 @@
 #include "vixDiskLib.h"
 #include "vixMntapi.h"
 
-using namespace std;
-
 #define ERROR_CODE 1
 
 struct ChangedDiskArea
@@ -36,8 +34,8 @@ private:
 
 	BackupStorage* m_backupStorage;
 
-	string m_device;
-	string m_backupId;
+	std::string m_device;
+	std::string m_backupId;
 
-	vector<ChangedDiskArea> m_changedDiskAreas;
+	std::vector<ChangedDiskArea> m_changedDiskAreas;
 };
