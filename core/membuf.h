@@ -2,8 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-using namespace std;
-
 struct membuf : streambuf
 {
 	membuf(char *begin, char *end) : begin(begin), end(end)
