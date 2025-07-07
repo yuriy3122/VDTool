@@ -15,8 +15,6 @@ constexpr auto MB_BLOCK_SIZE = 1024 * 1024;
 constexpr auto CMP_SIZE = 1024;
 constexpr auto SECTOR_NUM = 2048;
 
-using namespace std;
-
 enum BackupStatus
 {
 	Running = 1,
@@ -28,15 +26,15 @@ const int UploadBatchSize = 10;
 
 struct VolumeMetaData
 {
-	vector<string> backupIds;
+	std::vector<string> backupIds;
 };
 
 struct BackupMetaData
 {
 	BackupStatus status;
-	string encryptionKey;
-	map<uint32_t, uint64_t> blockHashTable;
-	vector<uint32_t> emptyBlocks;
+	std::string encryptionKey;
+	std::map<uint32_t, uint64_t> blockHashTable;
+	std::vector<uint32_t> emptyBlocks;
 };
 
 enum RestoreStatus
@@ -57,17 +55,17 @@ struct InputParams
 {
 	VixDiskLibConnectParams cnxParams;
 
-	string libDir;
-	string cfgFile;
-	string transportModes;
+	std::string libDir;
+	std::string cfgFile;
+	std::string transportModes;
 
-	string snapshotRef;
+	std::string snapshotRef;
 	bool fullBackup;
 	bool restore;
 	int volumeSize;
-	string changedDiskAreasFilePath;
+	std::string changedDiskAreasFilePath;
 
-	string vmdk;
+	std::string vmdk;
 };
 
 #endif
