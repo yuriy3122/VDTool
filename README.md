@@ -101,13 +101,13 @@ A simple log is written to `log.txt` in the current directory.
 
 ## 🧩 Design Patterns Emphasized
 
-- **Factory Pattern** — `StorageFactory.h` → _recommended rename_ `BackupStorageFactory.h`  
+- **Factory Pattern** — `StorageFactory.h`
   Produces a concrete `BackupStorage` implementation (S3 today; easy to add more backends).
 
 - **OOP / Polymorphism** — `BackupStorage.h`  
   Abstract base class with **pure virtual** methods for all storage operations (upload, list, download, metadata).
 
-- **Safe Thread Queue** — `core/thread_safe_queue.h` → _recommended rename_ `SafeQueue.h`  
+- **Safe Thread Queue** — `core/thread_safe_queue.h`
   Encapsulates a blocking queue for producer/consumer upload pipelines.
 
 ---
