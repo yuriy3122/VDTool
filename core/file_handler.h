@@ -12,50 +12,43 @@
 	#include <fcntl.h>
 #endif
 
-struct file_handler
-{
+struct file_handler {
 	int file_descriptor;
 
 	void *handle;
 
-	file_handler()
-	{
+	file_handler() {
 		file_descriptor = 0;
 		handle = NULL;
 	}
 };
 
-void log_error()
-{
+void log_error() {
 #if defined(_MSC_VER)
 	DWORD errorMessageId = GetLastError();
 
-	if (errorMessageId > 0)
-	{
+	if (errorMessageId > 0) {
 		LPSTR messageBuffer = nullptr;
 		size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, errorMessageId, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
 
-		string message(messageBuffer, size);
+		std::string message(messageBuffer, size);
 
 		LocalFree(messageBuffer);
 
-		cout << message << endl;
+		std::cout << message << std::endl;
 	}
 #endif
 }
 
-file_handler open_file_data(const char *file, const char *mode)
-{
+file_handler open_file_data(const char *file, const char *mode) {
 	file_handler handler;
 
 #if defined(__GNUC__)
-	if (mode == "rb")
-	{
+	if (mode == "rb") {
 		handler.file_descriptor = open(file, O_RDONLY);
 	}
-	else if (mode == "wb")
-	{
+	else if (mode == "wb") {
 		handler.file_descriptor = open(file, O_RDWR);
 	}
 #else
@@ -67,8 +60,7 @@ file_handler open_file_data(const char *file, const char *mode)
 
 	log_error();
 
-	if (!readonly)
-	{
+	if (!readonly) {
 		DWORD dwBytesReturned;
 		bool bRes = DeviceIoControl
 		(
@@ -90,8 +82,7 @@ file_handler open_file_data(const char *file, const char *mode)
 	return handler;
 }
 
-void seek_file(file_handler *handler, long offset)
-{
+void seek_file(file_handler *handler, long offset) {
 int result = 0;
 
 #if defined(__GNUC__)
@@ -107,8 +98,7 @@ int result = 0;
 #endif
 }
 
-int read_file_data(file_handler *handler, void *data, int size)
-{
+int read_file_data(file_handler *handler, void *data, int size) {
 	int result = 0;
 
 #if defined(__GNUC__)
@@ -125,8 +115,7 @@ int read_file_data(file_handler *handler, void *data, int size)
 	return result;
 }
 
-int write_file_data(file_handler *handler, void *data, int size)
-{
+int write_file_data(file_handler *handler, void *data, int size) {
 	int result = 0;
 
 #if defined(__GNUC__)
@@ -143,8 +132,7 @@ int write_file_data(file_handler *handler, void *data, int size)
 	return result;
 }
 
-void close_file(file_handler* handler)
-{
+void close_file(file_handler* handler) {
 #if defined(__GNUC__)
 	close(handler->file_descriptor);
 #else

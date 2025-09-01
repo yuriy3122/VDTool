@@ -26,7 +26,7 @@ const int UploadBatchSize = 10;
 
 struct VolumeMetaData
 {
-	std::vector<string> backupIds;
+	std::vector<std::string> backupIds;
 };
 
 struct BackupMetaData
@@ -46,9 +46,9 @@ enum RestoreStatus
 
 struct RestoreTaskMetaData
 {
-	string restoreId;
+	std::string restoreId;
 	RestoreStatus status;
-	string encryptionKey;
+	std::string encryptionKey;
 };
 
 struct InputParams

@@ -2,6 +2,7 @@
 #include "BackupProcessor.h"
 #include <aws/core/utils/json/JsonSerializer.h>
 
+using namespace std;
 using namespace Aws::Utils::Json;
 
 int main(int argc, char* argv[])
@@ -17,8 +18,7 @@ int main(int argc, char* argv[])
 	JsonValue json(content);
 	auto v = json.View();
 
-	if (!v.ValueExists("serverName"))
-	{
+	if (!v.ValueExists("serverName")) {
 		cout << "serverName missed";
 		return ERROR_CODE;
 	}
@@ -58,22 +58,19 @@ int main(int argc, char* argv[])
 	string restoreId = s3values["restoreId"].AsString();
 	string region = s3values["region"].AsString();
 
-	auto factory = new BackupStorageFactory("s3", clientId, volumeId, region);
-	auto backupProcessor = new BackupProcessor(factory->GetStorage(), backupId);
+	auto storage = BackupStorageFactory::Create("s3", clientId, volumeId, region);
+	auto backupProcessor = new BackupProcessor(storage.get(), backupId);
 
 	int result = 0;
 
-	if (params.restore)
-	{
+	if (params.restore) {
 		result = backupProcessor->RestoreData(params, volumeId, restoreId);
 	}
-	else
-	{
+	else {
 		result = backupProcessor->BackupData(params);
 	}
 
 	delete backupProcessor;
-	delete factory;
 
 	cout.rdbuf(coutbuf);
 

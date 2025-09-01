@@ -9,7 +9,7 @@ class BackupStorage
 public:
 	BackupStorage() {};
 
-	BackupStorage(std::string clientId, string volumeId, string region) :
+	BackupStorage(std::string clientId, std::string volumeId, std::string region) :
 		m_clientId(clientId),
 		m_volumeId(volumeId),
 		m_region(region)
@@ -22,15 +22,15 @@ public:
 
 	virtual void WaitForAllUploadTasksToComplete() = 0;
 
-	virtual void UploadBackupMetaData(string backupId, BackupMetaData &metadata) = 0;
+	virtual void UploadBackupMetaData(std::string backupId, BackupMetaData &metadata) = 0;
 
-	virtual VolumeMetaData GetVolumeMetaData(string volumeId) = 0;
+	virtual VolumeMetaData GetVolumeMetaData(std::string volumeId) = 0;
 
-	virtual BackupMetaData GetBackupMetaData(string backupId) = 0;
+	virtual BackupMetaData GetBackupMetaData(std::string backupId) = 0;
 
 	virtual void UploadRestoreTaskMetaData(const RestoreTaskMetaData &metadata) = 0;
 
-	virtual RestoreTaskMetaData GetRestoreTaskMetaData(string restoreId) = 0;
+	virtual RestoreTaskMetaData GetRestoreTaskMetaData(std::string restoreId) = 0;
 
 	virtual int GetBackupBlockData(std::string backupId, int partId, std::string key, const std::vector<int>& indices, char* buffer) = 0;
 

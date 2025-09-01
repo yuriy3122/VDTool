@@ -14,7 +14,7 @@ struct ChangedDiskArea
 class BackupProcessor
 {
 public:
-	BackupProcessor(BackupStorage* backupStorage, string backupId);
+	BackupProcessor(BackupStorage* backupStorage, std::string backupId);
 
 	BackupProcessor(const BackupProcessor&) = delete;
 	BackupProcessor& operator = (const BackupProcessor&) = delete;
@@ -22,7 +22,7 @@ public:
 	BackupProcessor& operator = (BackupProcessor&&) = delete;
 
 	int BackupData(InputParams& params);
-	int RestoreData(InputParams& params, string volumeId, string restoreId);
+	int RestoreData(InputParams& params, std::string volumeId, std::string restoreId);
 
 private:
 	int QueryAllocatedBlocks(VixDiskLibHandle& handle);

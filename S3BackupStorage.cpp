@@ -1,5 +1,10 @@
 #include "S3BackupStorage.h"
 
+using namespace std;
+using namespace Aws;
+using namespace Aws::S3;
+using namespace Aws::S3::Model;
+
 atomic_int upload_tasks_running(0);
 SafeQueue<int> upload_queue;
 
@@ -12,7 +17,7 @@ void PutObjectResultHandler(const S3Client* client, const PutObjectRequest& requ
 
 	int index = stoi(context->GetUUID());
 
-	upload_queue.enqueue(index);
+	upload_queue.push(index);
 
 	upload_tasks_running--;
 }
@@ -78,7 +83,7 @@ S3BackupStorage::S3BackupStorage(string clientId,
 
 	for (int i = 0; i < UploadBatchSize; i++)
 	{
-		upload_queue.enqueue(i);
+		upload_queue.push(i);
 	}
 }
 
@@ -251,7 +256,10 @@ void S3BackupStorage::WaitForAllUploadTasksToComplete()
 
 int S3BackupStorage::GetFreeBufferOffsetIndex()
 {
-	int index = upload_queue.dequeue();
+	int index;
+	if (!upload_queue.wait_for_new_item_and_pop(index, std::chrono::seconds(60))) {
+		std::cout << "timeout error" << std::endl;
+	}
 
 	return index;
 }

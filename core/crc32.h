@@ -6,8 +6,7 @@
 	#include <intrin.h>
 #endif
 
-uint64_t sse42_crc32(const uint64_t *buffer, size_t len)
-{
+uint64_t sse42_crc32(const uint64_t *buffer, size_t len) {
 	uint64_t hash = 0;
 
 	for (int i = 0; i < len / 8; i++)

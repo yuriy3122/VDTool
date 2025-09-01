@@ -11,7 +11,7 @@
 #include "core/thread_safe_queue.h"
 #include "BackupStorage.h"
 
-class S3BackupStorage : public BackupStorage
+class S3BackupStorage final: public BackupStorage
 {
 public:
 	S3BackupStorage(std::string clientId, std::string volumeId, std::string region);

@@ -2,8 +2,7 @@
 #include <string>
 #include <zlib.h>
 
-void compress_raw_data(void *in_data, size_t in_data_size, void *out_data, size_t &out_data_size)
-{
+void compress_raw_data(void *in_data, size_t in_data_size, void *out_data, size_t &out_data_size) {
 	z_stream zs;
 	zs.zalloc = 0;
 	zs.zfree = 0;
@@ -21,8 +20,7 @@ void compress_raw_data(void *in_data, size_t in_data_size, void *out_data, size_
 	out_data_size = zs.total_out;
 }
 
-long decompress_raw_data(void *in_data, size_t in_data_size, void *out_data, size_t out_data_size)
-{
+long decompress_raw_data(void *in_data, size_t in_data_size, void *out_data, size_t out_data_size) {
 	z_stream zs;
 	memset(&zs, 0, sizeof(zs));
 

@@ -1,26 +1,18 @@
 #include "S3BackupStorage.h"
 
-class BackupStorageFactory
-{
+// Factory pattern with RAII-friendly return type (unique_ptr)
+class BackupStorageFactory {
 public:
-	BackupStorageFactory(string type, string clientId, string volumeId, string region)
+	static std::unique_ptr<BackupStorage> Create(
+		const std::string& type,
+		const std::string& clientId,
+		const std::string& volumeId,
+		const std::string& region)
 	{
-		if (type == "s3" || type == "glacier")
-		{
-			m_storage = new S3BackupStorage(clientId, volumeId, region);
+		if (type == "s3" || type == "glacier") {
+			return std::unique_ptr<BackupStorage>(new S3BackupStorage(clientId, volumeId, region));
 		}
+		// Could add: "filesystem", "azure", etc.
+		return nullptr;
 	}
-
-	BackupStorage* GetStorage() { return m_storage; }
-
-	~BackupStorageFactory()
-	{
-		if (m_storage)
-		{
-			delete m_storage;
-			m_storage = NULL;
-		}
-	}
-private:
-	BackupStorage* m_storage;
 };
