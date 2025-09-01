@@ -14,7 +14,7 @@ VDTool is a modern C++ utility that performs **full and incremental** backups of
 
 ---
 
-## 🧱 Architecture at a Glance
+## 🧱 Project structure
 
 ```
 vdtool (entry)
