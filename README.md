@@ -1,6 +1,6 @@
 # VDTool — VMware VDDK → Amazon S3 Backup
 
-VDTool is a **modern C++ (C++11+)** utility that performs **full and incremental** backups of VMware virtual disks via the **VMware Virtual Disk Development Kit (VDDK)** and stores the data in **Amazon S3**. It is designed to be robust, and production‑ready, with attention to clean architecture, memory safety, and high throughput uploads.
+VDTool is a **modern C++ utility that performs **full and incremental** backups of VMware virtual disks via the **VMware Virtual Disk Development Kit (VDDK)** and stores the data in **Amazon S3**. It is designed to be robust, and production‑ready, with attention to clean architecture, memory safety, and high throughput uploads.
 
 ---
 
