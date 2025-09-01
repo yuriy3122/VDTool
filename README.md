@@ -1,9 +1,6 @@
 # VDTool — VMware VDDK → Amazon S3 Backup (Modern C++)
 
-VDTool is a **modern C++ (C++11+)** utility that performs **full and incremental** backups of VMware virtual disks via the **VMware Virtual Disk Development Kit (VDDK)** and stores the data in **Amazon S3**. It is designed to be **portable, robust, and production‑ready**, with attention to clean architecture, memory safety, and high throughput uploads.
-
-> **Docs**: VMware VDDK Programming Guide 7.0.x  
-> https://developer.vmware.com/docs/14686/virtual-disk-development-kit-programming-guide--7-0-3--/GUID-0329B9A0-A332-496F-9D2E-0C5E4E937535.html
+VDTool is a **modern C++ (C++11+)** utility that performs **full and incremental** backups of VMware virtual disks via the **VMware Virtual Disk Development Kit (VDDK)** and stores the data in **Amazon S3**. It is designed to be robust, and production‑ready**, with attention to clean architecture, memory safety, and high throughput uploads.
 
 ---
 
@@ -14,7 +11,7 @@ VDTool is a **modern C++ (C++11+)** utility that performs **full and incremental
 - **Compression + Integrity**: zlib compression and CRC verification.
 - **Clear, testable boundaries** via OOP (pure virtual `BackupStorage`), pluggable storage backends via **Factory pattern**.
 - **Safe concurrency** with a **thread-safe queue** abstraction.
-- Codebase is ready for **Windows (Visual Studio)** and has portable helpers for POSIX where appropriate.
+- Codebase is ready for **Windows (Visual Studio).
 
 ---
 
@@ -29,10 +26,10 @@ vdtool (entry)
       │   ├── compression.h        // zlib wrapper
       │   ├── crc32.h              // CRC helper (see notes below)
       │   ├── membuf.h
-      │   └── thread_safe_queue.h  // (recommended rename: SafeQueue.h)
+      │   └── thread_safe_queue.h  // Safe Queue
       ├── BackupStorage (abstract) // Pure virtual storage interface
       │   └── S3BackupStorage      // Concrete implementation using AWS SDK for C++
-      └── StorageFactory           // (recommended rename: BackupStorageFactory.h)
+      └── StorageFactory           //
 ```
 
 **Block format** (1 MiB logical blocks):  
@@ -125,8 +122,6 @@ A simple log is written to `log.txt` in the current directory.
 
 - Switch to **AWS TransferManager** (simplifies multipart uploads & retries).
 - **KMS encryption** toggle per backup.
-- **Zero‑block detection** with SIMD memcmp or fast scan (avoid relying on CRC=0 sentinel).
-- **CMake** build files for cross‑platform CI.
 - **Unit tests** for compressors, CRC, and block pack/unpack logic (e.g., with GoogleTest).
 
 ---
