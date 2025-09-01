@@ -7,7 +7,7 @@ VDTool is a modern C++ utility that performs **full and incremental** backups of
 ## ✨ Highlights
 
 - **Full & Incremental** backups (leveraging allocated blocks and/or Changed Block Tracking (CBT) metadata when available).
-- **Amazon S3 storage backend** (ready for Glacier tiering) with concurrent multipart-style uploads.
+- **Amazon S3 storage backend** with concurrent multipart-style uploads.
 - **Compression + Integrity**: zlib compression and CRC verification.
 - **Clear, testable boundaries** via OOP (pure virtual `BackupStorage`), pluggable storage backends via **Factory pattern**.
 - **Safe concurrency** with a **thread-safe queue** abstraction.
@@ -101,22 +101,6 @@ A simple log is written to `log.txt` in the current directory.
 - **S3 features**: Server‑side encryption (SSE‑S3/KMS), storage class, lifecycle policies (Glacier), and custom retry/backoff are easy to enable via the AWS SDK options.
 - **Integrity**: CRC validation over block payloads.
 - **Resilience**: Concurrent uploads with bounded parallelism to maintain backpressure and avoid memory spikes.
-
----
-
-## 🛣️ Roadmap / Nice‑to‑Haves
-
-- Switch to **AWS TransferManager** (simplifies multipart uploads & retries).
-- **KMS encryption** toggle per backup.
-- **Unit tests** for compressors, CRC, and block pack/unpack logic (e.g., with GoogleTest).
-
----
-
-## 🙌 Credits
-
-- VMware **VDDK**
-- AWS SDK for C++ (Core, S3)
-- zlib
 
 ---
 
