@@ -126,26 +126,6 @@ A simple log is written to `log.txt` in the current directory.
 
 ---
 
-## 📂 Repository Layout (key files)
-
-```
-.
-├─ vdtool.cpp                  # entry point (reads input.json, runs backup/restore)
-├─ BackupProcessor.h/.cpp      # VDDK integration, block packing/unpacking
-├─ BackupStorage.h             # abstract storage interface (pure virtual)
-├─ S3BackupStorage.h/.cpp      # AWS S3 implementation
-├─ StorageFactory.h            # (recommended rename: BackupStorageFactory.h)
-├─ CommonTypes.h               # shared constants & InputParams
-└─ core/
-   ├─ file_handler.h           # Windows/POSIX file helpers
-   ├─ compression.h            # zlib compress/decompress helpers
-   ├─ crc32.h                  # CRC helper (see notes below)
-   ├─ membuf.h                 # memory-backed streambuf
-   └─ thread_safe_queue.h      # (recommended rename: SafeQueue.h)
-```
-
----
-
 ## 🙌 Credits
 
 - VMware **VDDK**
