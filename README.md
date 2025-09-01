@@ -11,7 +11,6 @@ VDTool is a modern C++ utility that performs **full and incremental** backups of
 - **Compression + Integrity**: zlib compression and CRC verification.
 - **Clear, testable boundaries** via OOP (pure virtual `BackupStorage`), pluggable storage backends via **Factory pattern**.
 - **Safe concurrency** with a **thread-safe queue** abstraction.
-- Codebase is ready for Windows OS.
 
 ---
 
