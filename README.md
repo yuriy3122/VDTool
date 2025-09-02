@@ -18,17 +18,17 @@ VDTool is a modern C++ utility that performs **full and incremental** backups of
 
 ```
 vdtool (entry)
-  └── BackupProcessor              // Orchestrates VDDK connect/open/read & write paths
+  └── BackupProcessor              // Orchestrates VDDK connect/open/read & writes
       ├── VDDK (vixDiskLib)        // VMware disk API
-      ├── core/                    // Utilities: file I/O, compression, CRC, in‑memory streams, SafeQueue
-      │   ├── file_handler.h
-      │   ├── compression.h        // zlib wrapper
+      ├── core/                    // Utilities
+      │   ├── file_handler.h       // File I/O
+      │   ├── compression.h        // Zlib wrapper
       │   ├── crc32.h              // CRC helper (see notes below)
-      │   ├── membuf.h
+      │   ├── membuf.h             // In‑memory stream
       │   └── thread_safe_queue.h  // Safe Queue
       ├── BackupStorage (abstract) // Pure virtual storage interface
-      │   └── S3BackupStorage      // Concrete implementation using AWS SDK for C++
-      └── StorageFactory           //
+      │   └── S3BackupStorage      // Concrete implementation using AWS C++ SDK
+      └── StorageFactory           // Factory for BackupStorages
 ```
 
 **Block format** (1 MiB logical blocks):  
