@@ -52,7 +52,7 @@ Each “block” includes a tiny header with sector metadata (selected sector ID
 
 ---
 
-## 🧪 Build (Visual Studio)
+## 🏗️ Build (Visual Studio)
 
 1. Open **`vdtool.vcxproj`** in **Visual Studio 2022**.
 2. Right‑click the solution → **Restore NuGet Packages**.
