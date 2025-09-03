@@ -6,7 +6,7 @@ VDTool is a modern C++ utility that performs **full and incremental** backups of
 
 ## ✨ Highlights
 
-- **Full & Incremental** backups (leveraging Changed Block Tracking (CBT) VMWare feature).
+- **Full & Incremental** backups (leveraging Changed Block Tracking feature).
 - **Amazon S3 storage backend** with concurrent multipart-style uploads.
 - **Compression + Integrity**: zlib compression and CRC verification.
 - **Clear, testable boundaries** via OOP (pure virtual `BackupStorage`), pluggable storage backends via **Factory pattern**.
