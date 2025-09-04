@@ -101,9 +101,3 @@ A simple log is written to `log.txt` in the current directory.
 - **S3 features**: Server‑side encryption (SSE‑S3/KMS), storage class, lifecycle policies (Glacier), and custom retry/backoff are easy to enable via the AWS SDK options.
 - **Integrity**: CRC validation over block payloads.
 - **Resilience**: Concurrent uploads with bounded parallelism to maintain backpressure and avoid memory spikes.
-
----
-
-## 📝 License
-
-MIT (or your preferred license)
