@@ -23,7 +23,7 @@ vdtool (entry)
       ├── core/                    // Utilities
       │   ├── file_handler.h       // File I/O
       │   ├── compression.h        // Zlib wrapper
-      │   ├── crc32.h              // CRC helper (see notes below)
+      │   ├── crc32.h              // CRC helper, generates hashes for data blocks using CRC32C Castagnoli algorithm
       │   ├── membuf.h             // In‑memory stream
       │   └── thread_safe_queue.h  // Safe Queue
       ├── BackupStorage (abstract) // Pure virtual storage interface
