@@ -5,8 +5,6 @@ using namespace Aws;
 using namespace Aws::S3;
 using namespace Aws::S3::Model;
 
-atomic_int upload_tasks_running(0);
-
 void PutObjectResultHandler(const S3Client* client,
                             const PutObjectRequest& request,
                             const PutObjectOutcome& outcome,
@@ -21,8 +19,6 @@ void PutObjectResultHandler(const S3Client* client,
 
     // Return buffer index into the correct instance of S3BackupStorage
     ctx->storage->m_upload_queue.push(ctx->bufferIndex);
-
-    upload_tasks_running--;
 }
 
 S3BackupStorage::S3BackupStorage(string clientId,
@@ -73,9 +69,7 @@ void S3BackupStorage::UploadBackupSectorDataAsync(string backupId,
                                                   int bufferOffsetIndex,
                                                   size_t bufferSize)
 {
-    streambuf* buf = new membuf((char*)bufferOffset,
-                                (char*)bufferOffset + bufferSize);
-
+    streambuf* buf = new membuf((char*)bufferOffset, (char*)bufferOffset + bufferSize);
     auto objectStream = Aws::MakeShared<Aws::IOStream>("BlockUpload", buf);
 
     PutObjectRequest request;
@@ -85,8 +79,6 @@ void S3BackupStorage::UploadBackupSectorDataAsync(string backupId,
 
     // Create our custom context with pointer to *this* and buffer index
     auto context = Aws::MakeShared<S3UploadContext>("PutCtx", this, bufferOffsetIndex);
-
-    upload_tasks_running++;
 
     m_s3Client->PutObjectAsync(request, PutObjectResultHandler, context);
 }
