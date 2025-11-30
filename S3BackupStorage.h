@@ -24,6 +24,12 @@ public:
 
 	~S3BackupStorage();
 
+	friend void PutObjectResultHandler(
+    	const Aws::S3::S3Client*,
+    	const Aws::S3::Model::PutObjectRequest&,
+    	const Aws::S3::Model::PutObjectOutcome&,
+    	const std::shared_ptr<const Aws::Client::AsyncCallerContext>&);
+
 	int GetFreeBufferOffsetIndex() override;
 
 	void UploadBackupSectorDataAsync(std::string backupId, std::string item, std::string key, const char* bufferOffset, int bufferOffsetIndex, size_t bufferSize) override;
