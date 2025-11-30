@@ -11,6 +11,22 @@
 #include "core/BoundedQueue.h"
 #include "BackupStorage.h"
 
+// -----------------------------
+// Custom async context
+// -----------------------------
+class S3BackupStorage;  // forward declaration
+
+class S3UploadContext : public Aws::Client::AsyncCallerContext
+{
+public:
+    S3BackupStorage* storage;  // pointer back to object
+    int bufferIndex;           // which buffer to return
+
+    S3UploadContext(S3BackupStorage* s, int idx)
+        : storage(s), bufferIndex(idx)
+    {}
+};
+
 class S3BackupStorage final: public BackupStorage
 {
 public:
