@@ -8,7 +8,7 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/model/ListObjectsRequest.h>
 #include "core/membuf.h"
-#include "core/thread_safe_queue.h"
+#include "core/BoundedQueue.h"
 #include "BackupStorage.h"
 
 class S3BackupStorage final: public BackupStorage
@@ -51,6 +51,8 @@ private:
 	long m_requestTimeoutMs;
 
 	Aws::SDKOptions m_options;
-
 	Aws::S3::S3Client *m_s3Client;
+
+    // bounded MPMC queue with capacity UploadBatchSize
+    BoundedQueue<int> upload_queue;
 };
