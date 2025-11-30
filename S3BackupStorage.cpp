@@ -62,14 +62,8 @@ S3BackupStorage::~S3BackupStorage()
 
 int S3BackupStorage::GetFreeBufferOffsetIndex()
 {
-    while (true)
-    {
-        auto v = m_upload_queue.pop();
-        if (v.has_value())
-            return v.value();
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    auto v = upload_queue.pop();
+    return v.value();   // safe, pop blocks until value exists
 }
 
 void S3BackupStorage::UploadBackupSectorDataAsync(string backupId,
