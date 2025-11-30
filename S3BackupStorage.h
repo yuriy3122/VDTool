@@ -60,5 +60,5 @@ private:
 	Aws::S3::S3Client *m_s3Client;
 
     // bounded MPMC queue with capacity UploadBatchSize
-    BoundedQueue<int> upload_queue;
+    BoundedQueue<int> m_upload_queue;
 };
