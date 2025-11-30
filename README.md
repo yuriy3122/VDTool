@@ -25,7 +25,7 @@ vdtool (entry)
       │   ├── compression.h        // Zlib wrapper
       │   ├── crc32.h              // CRC helper, generates hashes for data blocks using CRC32C Castagnoli algorithm
       │   ├── membuf.h             // In‑memory stream
-      │   └── thread_safe_queue.h  // Safe Queue
+      │   └── BoundedQueue.h       // BoundedQueue
       ├── BackupStorage (abstract) // Pure virtual storage interface
       │   └── S3BackupStorage      // Concrete implementation using AWS C++ SDK
       └── StorageFactory           // Factory for BackupStorages
