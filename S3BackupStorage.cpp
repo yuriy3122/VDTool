@@ -76,12 +76,10 @@ void S3BackupStorage::UploadBackupSectorDataAsync(string backupId,
     streambuf* buf = new membuf((char*)bufferOffset,
                                 (char*)bufferOffset + bufferSize);
 
-    auto objectStream =
-        Aws::MakeShared<Aws::IOStream>("BlockUpload", buf);
+    auto objectStream = Aws::MakeShared<Aws::IOStream>("BlockUpload", buf);
 
     PutObjectRequest request;
-    request.WithBucket(GetVolumeBucket() + "/backups/" + backupId + "/blockdata/")
-           .WithKey(item);
+    request.WithBucket(GetVolumeBucket() + "/backups/" + backupId + "/blockdata/").WithKey(item);
     request.SetBody(objectStream);
     request.SetContentLength(bufferSize);
 
