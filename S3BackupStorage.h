@@ -8,8 +8,25 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/model/ListObjectsRequest.h>
 #include "core/membuf.h"
-#include "core/thread_safe_queue.h"
+#include "core/BoundedQueue.h"
 #include "BackupStorage.h"
+
+// -----------------------------
+// Custom async context
+// -----------------------------
+class S3BackupStorage;  // forward declaration
+
+class S3UploadContext : public Aws::Client::AsyncCallerContext
+{
+public:
+	S3BackupStorage* storage;  // pointer back to object
+	int bufferIndex;           // which buffer to return
+
+	S3UploadContext(S3BackupStorage* s, int idx)
+		: storage(s), bufferIndex(idx)
+	{
+	}
+};
 
 class S3BackupStorage final: public BackupStorage
 {
@@ -23,6 +40,12 @@ public:
 	S3BackupStorage& operator =(S3BackupStorage&&) = delete;
 
 	~S3BackupStorage();
+
+	friend void PutObjectResultHandler(
+    	const Aws::S3::S3Client*,
+    	const Aws::S3::Model::PutObjectRequest&,
+    	const Aws::S3::Model::PutObjectOutcome&,
+    	const std::shared_ptr<const Aws::Client::AsyncCallerContext>&);
 
 	int GetFreeBufferOffsetIndex() override;
 
@@ -51,6 +74,8 @@ private:
 	long m_requestTimeoutMs;
 
 	Aws::SDKOptions m_options;
-
 	Aws::S3::S3Client *m_s3Client;
+
+    // bounded MPMC queue with capacity UploadBatchSize
+    BoundedQueue<int> m_upload_queue;
 };

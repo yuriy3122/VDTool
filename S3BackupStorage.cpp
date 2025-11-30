@@ -5,21 +5,24 @@ using namespace Aws;
 using namespace Aws::S3;
 using namespace Aws::S3::Model;
 
-atomic_int upload_tasks_running(0);
-SafeQueue<int> upload_queue;
+std::atomic_int upload_tasks_running(0);
 
-void PutObjectResultHandler(const S3Client* client, const PutObjectRequest& request, const PutObjectOutcome& outcome, const shared_ptr<const Client::AsyncCallerContext>& context)
+void PutObjectResultHandler(const S3Client* client,
+                            const PutObjectRequest& request,
+                            const PutObjectOutcome& outcome,
+                            const shared_ptr<const Aws::Client::AsyncCallerContext>& baseCtx)
 {
-	if (!outcome.IsSuccess())
-	{
-		cout << "Error: " << outcome.GetError().GetExceptionName() << " - " << outcome.GetError().GetMessage() << endl;
-	}
+    auto ctx = static_pointer_cast<const S3UploadContext>(baseCtx);
 
-	int index = stoi(context->GetUUID());
+    if (!outcome.IsSuccess())
+    {
+        cout << "Error: " << outcome.GetError().GetMessage() << endl;
+    }
 
-	upload_queue.push(index);
-
-	upload_tasks_running--;
+    // Return buffer index into the correct instance of S3BackupStorage
+    ctx->storage->m_upload_queue.push(ctx->bufferIndex);
+  
+    upload_tasks_running--;
 }
 
 int GetDataBlock(string bucket, string region, string key, const char* item, char* dstBuffer)
@@ -61,40 +64,318 @@ int GetDataBlock(string bucket, string region, string key, const char* item, cha
 }
 
 S3BackupStorage::S3BackupStorage(string clientId,
-								 string volumeId,
-								 string region)
+                                 string volumeId,
+                                 string region)
+    : m_upload_queue(UploadBatchSize)
 {
-	m_connectTimeoutMs = 30000;
-	m_requestTimeoutMs = 600000;
-	m_clientId = clientId;
-	m_volumeId = volumeId;
-	m_region = region;
+    m_connectTimeoutMs = 30000;
+    m_requestTimeoutMs = 600000;
 
-	InitAPI(m_options);
+    m_clientId = clientId;
+    m_volumeId = volumeId;
+    m_region = region;
+
+    InitAPI(m_options);
+
+    Client::ClientConfiguration config;
+    config.scheme = Http::Scheme::HTTPS;
+    config.region = m_region.c_str();
+    config.connectTimeoutMs = m_connectTimeoutMs;
+    config.requestTimeoutMs = m_requestTimeoutMs;
+    config.executor = Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>("ThreadPool", 20);
+
+    m_s3Client = new S3Client(config);
+
+    // Fill queue with free buffer indices
+    for (int i = 0; i < UploadBatchSize; i++)
+        m_upload_queue.push(i);
+}
+
+S3BackupStorage::~S3BackupStorage()
+{
+    delete m_s3Client;
+
+    ShutdownAPI(m_options);
+}
+
+int S3BackupStorage::GetFreeBufferOffsetIndex()
+{
+    auto v = m_upload_queue.pop();
+    return v.value();   // safe, pop blocks until value exists
+}
+
+void S3BackupStorage::UploadBackupSectorDataAsync(string backupId,
+                                                  string item,
+                                                  string key,
+                                                  const char* bufferOffset,
+                                                  int bufferOffsetIndex,
+                                                  size_t bufferSize)
+{
+    streambuf* buf = new membuf((char*)bufferOffset, (char*)bufferOffset + bufferSize);
+    auto objectStream = Aws::MakeShared<Aws::IOStream>("BlockUpload", buf);
+
+    PutObjectRequest request;
+    request.WithBucket(GetVolumeBucket() + "/backups/" + backupId + "/blockdata/").WithKey(item);
+    request.SetBody(objectStream);
+    request.SetContentLength(bufferSize);
+
+    // Create our custom context with pointer to *this* and buffer index
+    auto context = Aws::MakeShared<S3UploadContext>("PutCtx", this, bufferOffsetIndex);
+
+    upload_tasks_running++;
+
+    m_s3Client->PutObjectAsync(request, PutObjectResultHandler, context);
+}
+
+void S3BackupStorage::WaitForAllUploadTasksToComplete()
+{
+    while (upload_tasks_running > 0)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+RestoreTaskMetaData S3BackupStorage::GetRestoreTaskMetaData(string restoreId)
+{
+	RestoreTaskMetaData metadata;
+	metadata.restoreId = restoreId;
 
 	Client::ClientConfiguration config;
 	config.scheme = Http::Scheme::HTTPS;
 	config.region = m_region.c_str();
 	config.connectTimeoutMs = m_connectTimeoutMs;
 	config.requestTimeoutMs = m_requestTimeoutMs;
-	config.executor = MakeShared<Utils::Threading::PooledThreadExecutor>("PooledThreadExecutor", 20);
+	S3Client s3_client(config);
 
-	m_s3Client = new S3Client(config);
+	string bucket = GetVolumeBucket() + "/restore";
 
-	for (int i = 0; i < UploadBatchSize; i++)
+	GetObjectRequest request;
+	request.WithBucket(bucket.c_str()).WithKey(restoreId.c_str());
+
+	auto outcome = s3_client.GetObject(request);
+
+	if (outcome.IsSuccess())
 	{
-		upload_queue.push(i);
+		auto size = outcome.GetResult().GetContentLength();
+		char* buffer = (char*)malloc(size);
+		std::streambuf* cbuf = outcome.GetResult().GetBody().rdbuf();
+		cbuf->sgetn(buffer, size);
+
+		metadata.status = (RestoreStatus)(*(uint32_t*)buffer);
+		uint32_t pos = sizeof(uint32_t);
+
+		uint32_t encryptionKeyLength = *(uint32_t*)(buffer + pos);
+		pos += sizeof(uint32_t);
+
+		if (encryptionKeyLength > 0)
+		{
+			metadata.encryptionKey = string(buffer + pos, encryptionKeyLength * sizeof(char));
+			pos += encryptionKeyLength * sizeof(char);
+		}
+
+		free(buffer);
 	}
+	else
+	{
+		cout << "Error: "
+			<< outcome.GetError().GetExceptionName() << " - "
+			<< outcome.GetError().GetMessage() << endl;
+	}
+
+	return metadata;
 }
 
-S3BackupStorage::~S3BackupStorage()
+void S3BackupStorage::UploadRestoreTaskMetaData(const RestoreTaskMetaData& metadata)
 {
-	if (m_s3Client != NULL)
+	size_t size = 2 * sizeof(uint32_t) + sizeof(char) * metadata.encryptionKey.length();
+	char* buffer = (char*)malloc(size);
+	long pos = 0;
+
+	uint32_t status = (uint32_t)metadata.status;
+	memcpy(buffer, (void*)&status, sizeof(uint32_t));
+	pos += sizeof(uint32_t);
+
+	uint32_t keyLength = (uint32_t)metadata.encryptionKey.length();
+	memcpy(buffer + pos, (void*)&keyLength, sizeof(uint32_t));
+	pos += sizeof(uint32_t);
+
+	if (keyLength > 0)
 	{
-		delete m_s3Client;
+		const char* ptr = metadata.encryptionKey.c_str();
+		memcpy(buffer + pos, (void*)ptr, keyLength * sizeof(char));
+		pos += keyLength * sizeof(char);
 	}
 
-	ShutdownAPI(m_options);
+	Client::ClientConfiguration config;
+	config.scheme = Http::Scheme::HTTPS;
+	config.region = m_region.c_str();
+	config.connectTimeoutMs = m_connectTimeoutMs;
+	config.requestTimeoutMs = m_requestTimeoutMs;
+	S3Client s3_client(config);
+
+	streambuf* buf = new membuf(buffer, buffer + size);
+	auto objectStream = MakeShared<IOStream>("BlockUpload", buf);
+
+	string bucket = GetVolumeBucket() + "/restore";
+
+	PutObjectRequest request;
+	request.WithBucket(bucket.c_str()).WithKey(metadata.restoreId.c_str());
+	request.SetBody(objectStream);
+	request.SetContentLength(size);
+
+	auto outcome = s3_client.PutObject(request);
+
+	if (!outcome.IsSuccess())
+	{
+		cout << "Error: "
+			<< outcome.GetError().GetExceptionName() << " - "
+			<< outcome.GetError().GetMessage() << endl;
+	}
+
+	free(buffer);
+}
+
+
+void S3BackupStorage::UploadBackupMetaData(string backupId, BackupMetaData& metadata)
+{
+	size_t size = 3 * sizeof(int) +
+		(sizeof(uint32_t) + sizeof(char) * metadata.encryptionKey.length()) +
+		(sizeof(uint32_t) + sizeof(uint64_t)) * metadata.blockHashTable.size() +
+		(sizeof(uint32_t) * metadata.emptyBlocks.size());
+
+	char* buffer = (char*)malloc(size);
+
+	long pos = 0;
+
+	uint32_t status = (uint32_t)metadata.status;
+	memcpy(buffer, (void*)&status, sizeof(uint32_t));
+	pos += sizeof(uint32_t);
+
+	uint32_t num = (uint32_t)metadata.blockHashTable.size();
+	memcpy(buffer + pos, (void*)&num, sizeof(uint32_t));
+	pos += sizeof(uint32_t);
+
+	uint32_t emptyBlocks = (uint32_t)metadata.emptyBlocks.size();
+	memcpy(buffer + pos, (void*)&emptyBlocks, sizeof(uint32_t));
+	pos += sizeof(uint32_t);
+
+	uint32_t keyLength = (uint32_t)metadata.encryptionKey.length();
+	memcpy(buffer + pos, (void*)&keyLength, sizeof(uint32_t));
+	pos += sizeof(uint32_t);
+
+	if (keyLength > 0)
+	{
+		const char* ptr = metadata.encryptionKey.c_str();
+		memcpy(buffer + pos, (void*)ptr, keyLength * sizeof(char));
+		pos += keyLength * sizeof(char);
+	}
+
+	for (auto iter = metadata.blockHashTable.begin(); iter != metadata.blockHashTable.end(); iter++)
+	{
+		memcpy(buffer + pos, (void*)&(iter->first), sizeof(uint32_t));
+		memcpy(buffer + pos + sizeof(uint32_t), (void*)&(iter->second), sizeof(uint64_t));
+
+		pos += (sizeof(uint32_t) + sizeof(uint64_t));
+	}
+
+	for (size_t i = 0; i < metadata.emptyBlocks.size(); i++)
+	{
+		uint32_t index = metadata.emptyBlocks[i];
+		memcpy(buffer + pos, (void*)&index, sizeof(uint32_t));
+
+		pos += sizeof(uint32_t);
+	}
+
+	Client::ClientConfiguration config;
+	config.scheme = Http::Scheme::HTTPS;
+	config.region = m_region.c_str();
+	config.connectTimeoutMs = m_connectTimeoutMs;
+	config.requestTimeoutMs = m_requestTimeoutMs;
+	S3Client s3_client(config);
+
+	streambuf* buf = new membuf(buffer, buffer + size);
+	auto objectStream = MakeShared<IOStream>("BlockUpload", buf);
+
+	string bucket = GetVolumeBucket() + "/backups/" + backupId + "/metadata";
+
+	PutObjectRequest request;
+	request.WithBucket(bucket.c_str()).WithKey("metadata");
+	request.SetBody(objectStream);
+	request.SetContentLength(size);
+
+	auto outcome = s3_client.PutObject(request);
+
+	if (!outcome.IsSuccess())
+	{
+		cout << "Error: "
+			<< outcome.GetError().GetExceptionName() << " - "
+			<< outcome.GetError().GetMessage() << endl;
+	}
+
+	free(buffer);
+}
+
+int S3BackupStorage::ListObjects(string backupId, int partId, vector<int>& objects)
+{
+	int result = 0;
+	Client::ClientConfiguration config;
+	config.scheme = Http::Scheme::HTTPS;
+	config.region = m_region.c_str();
+	config.connectTimeoutMs = m_connectTimeoutMs;
+	config.requestTimeoutMs = m_requestTimeoutMs;
+	S3Client s3_client(config);
+
+	string bucket = m_clientId;
+	string prefix = m_volumeId + "/backups/" + backupId + "/blockdata/" + std::to_string(partId + 1) + "/";
+	ListObjectsRequest request;
+	request.WithBucket(bucket.c_str()).WithPrefix(prefix.c_str()).WithDelimiter("/");
+
+	ListObjectsOutcome outcome;
+
+	do
+	{
+		outcome = s3_client.ListObjects(request);
+
+		if (outcome.IsSuccess())
+		{
+			auto marker = outcome.GetResult().GetNextMarker();
+
+			if (!marker.empty())
+			{
+				request.SetMarker(marker.c_str());
+			}
+
+			auto objects_list = outcome.GetResult().GetContents();
+
+			for (auto iter = objects_list.begin(); iter != objects_list.end(); iter++)
+			{
+				if (iter->GetSize() > 0)
+				{
+					string key = iter->GetKey().c_str();
+					size_t pos = key.find(prefix);
+
+					if (pos != string::npos)
+					{
+						key.erase(0, pos + prefix.length());
+					}
+
+					auto object = atoi(key.c_str()) - 1;
+
+					if (std::find(objects.begin(), objects.end(), object) == objects.end())
+					{
+						objects.push_back(object);
+					}
+				}
+			}
+		}
+		else
+		{
+			cout << "Error: " << outcome.GetError().GetExceptionName() << " - " << outcome.GetError().GetMessage() << endl;
+			return 1;
+		}
+	} while (outcome.GetResult().GetIsTruncated());
+
+	return result;
 }
 
 VolumeMetaData S3BackupStorage::GetVolumeMetaData(string volumeId)
@@ -239,302 +520,4 @@ int S3BackupStorage::GetBackupBlockData(string backupId, int partId, string key,
 	return size;
 }
 
-void S3BackupStorage::WaitForAllUploadTasksToComplete()
-{
-	while (true)
-	{
-		if (upload_tasks_running == 0)
-		{
-			break;
-		}
-		else
-		{
-			this_thread::sleep_for(1s);
-		}
-	}
-}
 
-int S3BackupStorage::GetFreeBufferOffsetIndex()
-{
-	int index;
-	if (!upload_queue.wait_for_new_item_and_pop(index, std::chrono::seconds(60))) {
-		std::cout << "timeout error" << std::endl;
-	}
-
-	return index;
-}
-
-void S3BackupStorage::UploadBackupSectorDataAsync(string backupId, string item, string key, const char* bufferOffset, int bufferOffsetIndex, size_t bufferSize)
-{
-	char *ptr = (char*)bufferOffset;
-	const char *cstr = item.c_str();
-	streambuf *buf = new membuf(ptr, ptr + bufferSize);
-	string bucket = GetVolumeBucket() + "/backups/" + backupId + "/blockdata/";
-		
-	auto objectStream = MakeShared<IOStream>("BlockUpload", buf);
-	
-	PutObjectRequest request;
-	request.WithBucket(bucket.c_str()).WithKey(cstr).WithTagging("custom");
-	request.SetBody(objectStream);
-	request.SetContentLength(bufferSize);
-
-	if (!key.empty())
-	{
-		auto keyEncoded = Aws::Utils::HashingUtils::Base64Encode(Aws::Utils::ByteBuffer((unsigned char*)key.c_str(), key.length()));
-		auto md5Encoded = Aws::Utils::HashingUtils::Base64Encode(Aws::Utils::HashingUtils::CalculateMD5(Aws::String(key.c_str())));
-
-		request.SetSSECustomerAlgorithm("AES256");
-		request.SetSSECustomerKey(keyEncoded);
-		request.SetSSECustomerKeyMD5(md5Encoded);
-	}
-
-	shared_ptr<Client::AsyncCallerContext> context = MakeShared<Client::AsyncCallerContext>("PutObjectAllocationTag");
-	context->SetUUID(to_string(bufferOffsetIndex));
-
-	upload_tasks_running++;
-
-	m_s3Client->PutObjectAsync(request, PutObjectResultHandler, context);
-}
-
-void S3BackupStorage::UploadBackupMetaData(string backupId, BackupMetaData &metadata)
-{
-	size_t size = 3 * sizeof(int) +
-		(sizeof(uint32_t) + sizeof(char) * metadata.encryptionKey.length()) +
-		(sizeof(uint32_t) + sizeof(uint64_t)) * metadata.blockHashTable.size() +
-		(sizeof(uint32_t) * metadata.emptyBlocks.size());
-
-	char* buffer = (char*)malloc(size);
-
-	long pos = 0;
-
-	uint32_t status = (uint32_t)metadata.status;
-	memcpy(buffer, (void*)&status, sizeof(uint32_t));
-	pos += sizeof(uint32_t);
-
-	uint32_t num = (uint32_t)metadata.blockHashTable.size();
-	memcpy(buffer + pos, (void*)&num, sizeof(uint32_t));
-	pos += sizeof(uint32_t);
-
-	uint32_t emptyBlocks = (uint32_t)metadata.emptyBlocks.size();
-	memcpy(buffer + pos, (void*)&emptyBlocks, sizeof(uint32_t));
-	pos += sizeof(uint32_t);
-
-	uint32_t keyLength = (uint32_t)metadata.encryptionKey.length();
-	memcpy(buffer + pos, (void*)&keyLength, sizeof(uint32_t));
-	pos += sizeof(uint32_t);
-
-	if (keyLength > 0)
-	{
-		const char* ptr = metadata.encryptionKey.c_str();
-		memcpy(buffer + pos, (void*)ptr, keyLength * sizeof(char));
-		pos += keyLength * sizeof(char);
-	}
-
-	for (auto iter = metadata.blockHashTable.begin(); iter != metadata.blockHashTable.end(); iter++)
-	{
-		memcpy(buffer + pos, (void*)&(iter->first), sizeof(uint32_t));
-		memcpy(buffer + pos + sizeof(uint32_t), (void*)&(iter->second), sizeof(uint64_t));
-
-		pos += (sizeof(uint32_t) + sizeof(uint64_t));
-	}
-
-	for (size_t i = 0; i < metadata.emptyBlocks.size(); i++)
-	{
-		uint32_t index = metadata.emptyBlocks[i];
-		memcpy(buffer + pos, (void*)&index, sizeof(uint32_t));
-
-		pos += sizeof(uint32_t);
-	}
-
-	Client::ClientConfiguration config;
-	config.scheme = Http::Scheme::HTTPS;
-	config.region = m_region.c_str();
-	config.connectTimeoutMs = m_connectTimeoutMs;
-	config.requestTimeoutMs = m_requestTimeoutMs;
-	S3Client s3_client(config);
-
-	streambuf *buf = new membuf(buffer, buffer + size);
-	auto objectStream = MakeShared<IOStream>("BlockUpload", buf);
-
-	string bucket = GetVolumeBucket() + "/backups/" + backupId + "/metadata";
-
-	PutObjectRequest request;
-	request.WithBucket(bucket.c_str()).WithKey("metadata");
-	request.SetBody(objectStream);
-	request.SetContentLength(size);
-
-	auto outcome = s3_client.PutObject(request);
-
-	if (!outcome.IsSuccess())
-	{
-		cout << "Error: "
-			<< outcome.GetError().GetExceptionName() << " - "
-			<< outcome.GetError().GetMessage() << endl;
-	}
-
-	free(buffer);
-}
-
-RestoreTaskMetaData S3BackupStorage::GetRestoreTaskMetaData(string restoreId)
-{
-	RestoreTaskMetaData metadata;
-	metadata.restoreId = restoreId;
-
-	Client::ClientConfiguration config;
-	config.scheme = Http::Scheme::HTTPS;
-	config.region = m_region.c_str();
-	config.connectTimeoutMs = m_connectTimeoutMs;
-	config.requestTimeoutMs = m_requestTimeoutMs;
-	S3Client s3_client(config);
-
-	string bucket = GetVolumeBucket() + "/restore";
-
-	GetObjectRequest request;
-	request.WithBucket(bucket.c_str()).WithKey(restoreId.c_str());
-
-	auto outcome = s3_client.GetObject(request);
-
-	if (outcome.IsSuccess())
-	{
-		auto size = outcome.GetResult().GetContentLength();
-		char* buffer = (char*)malloc(size);
-		std::streambuf* cbuf = outcome.GetResult().GetBody().rdbuf();
-		cbuf->sgetn(buffer, size);
-
-		metadata.status = (RestoreStatus)(*(uint32_t*)buffer);
-		uint32_t pos = sizeof(uint32_t);
-
-		uint32_t encryptionKeyLength = *(uint32_t*)(buffer + pos);
-		pos += sizeof(uint32_t);
-
-		if (encryptionKeyLength > 0)
-		{
-			metadata.encryptionKey = string(buffer + pos, encryptionKeyLength * sizeof(char));
-			pos += encryptionKeyLength * sizeof(char);
-		}
-
-		free(buffer);
-	}
-	else
-	{
-		cout << "Error: "
-			<< outcome.GetError().GetExceptionName() << " - "
-			<< outcome.GetError().GetMessage() << endl;
-	}
-
-	return metadata;
-}
-
-void S3BackupStorage::UploadRestoreTaskMetaData(const RestoreTaskMetaData &metadata)
-{
-	size_t size = 2 * sizeof(uint32_t) + sizeof(char) * metadata.encryptionKey.length();
-	char* buffer = (char*)malloc(size);
-	long pos = 0;
-
-	uint32_t status = (uint32_t)metadata.status;
-	memcpy(buffer, (void*)&status, sizeof(uint32_t));
-	pos += sizeof(uint32_t);
-
-	uint32_t keyLength = (uint32_t)metadata.encryptionKey.length();
-	memcpy(buffer + pos, (void*)&keyLength, sizeof(uint32_t));
-	pos += sizeof(uint32_t);
-
-	if (keyLength > 0)
-	{
-		const char* ptr = metadata.encryptionKey.c_str();
-		memcpy(buffer + pos, (void*)ptr, keyLength * sizeof(char));
-		pos += keyLength * sizeof(char);
-	}
-
-	Client::ClientConfiguration config;
-	config.scheme = Http::Scheme::HTTPS;
-	config.region = m_region.c_str();
-	config.connectTimeoutMs = m_connectTimeoutMs;
-	config.requestTimeoutMs = m_requestTimeoutMs;
-	S3Client s3_client(config);
-
-	streambuf *buf = new membuf(buffer, buffer + size);
-	auto objectStream = MakeShared<IOStream>("BlockUpload", buf);
-
-	string bucket = GetVolumeBucket() + "/restore";
-
-	PutObjectRequest request;
-	request.WithBucket(bucket.c_str()).WithKey(metadata.restoreId.c_str());
-	request.SetBody(objectStream);
-	request.SetContentLength(size);
-
-	auto outcome = s3_client.PutObject(request);
-
-	if (!outcome.IsSuccess())
-	{
-		cout << "Error: "
-			<< outcome.GetError().GetExceptionName() << " - "
-			<< outcome.GetError().GetMessage() << endl;
-	}
-
-	free(buffer);
-}
-
-int S3BackupStorage::ListObjects(string backupId, int partId, vector<int>& objects)
-{
-	int result = 0;
-	Client::ClientConfiguration config;
-	config.scheme = Http::Scheme::HTTPS;
-	config.region = m_region.c_str();
-	config.connectTimeoutMs = m_connectTimeoutMs;
-	config.requestTimeoutMs = m_requestTimeoutMs;
-	S3Client s3_client(config);
-
-	string bucket = m_clientId;
-	string prefix = m_volumeId + "/backups/" + backupId + "/blockdata/" + std::to_string(partId + 1) + "/";
-	ListObjectsRequest request;
-	request.WithBucket(bucket.c_str()).WithPrefix(prefix.c_str()).WithDelimiter("/");
-
-	ListObjectsOutcome outcome;
-
-	do
-	{
-		outcome = s3_client.ListObjects(request);
-
-		if (outcome.IsSuccess())
-		{
-			auto marker = outcome.GetResult().GetNextMarker();
-
-			if (!marker.empty())
-			{
-				request.SetMarker(marker.c_str());
-			}
-
-			auto objects_list = outcome.GetResult().GetContents();
-
-			for (auto iter = objects_list.begin(); iter != objects_list.end(); iter++)
-			{
-				if (iter->GetSize() > 0)
-				{
-					string key = iter->GetKey().c_str();
-					size_t pos = key.find(prefix);
-
-					if (pos != string::npos)
-					{
-						key.erase(0, pos + prefix.length());
-					}
-
-					auto object = atoi(key.c_str()) - 1;
-
-					if (std::find(objects.begin(), objects.end(), object) == objects.end())
-					{
-						objects.push_back(object);
-					}
-				}
-			}
-		}
-		else
-		{
-			cout << "Error: " << outcome.GetError().GetExceptionName() << " - " << outcome.GetError().GetMessage() << endl;
-			return 1;
-		}
-	}
-	while (outcome.GetResult().GetIsTruncated());
-
-	return result;
-}
